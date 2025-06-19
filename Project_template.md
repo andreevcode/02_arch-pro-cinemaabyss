@@ -94,89 +94,45 @@
  - настроен `minikube tunnel`;
 
 2. Ручной прогон в постмане запроса из задания (_Вызовите https://cinemaabyss.example.com/api/movies_) и других запросов:
-  ![3.2_01_postman_api.movies.png](images/3.2_01_postman_api.movies.png)
+  - ![3.2_01_postman_api.movies.png](images/3.2_01_postman_api.movies.png)
 
 3. Запуск тестов из папки tests/postman `npm run test:kubernetes`
- - логи тестов: ![3.2_02_api_tests_logs.png](images/3.2_02_api_tests_logs.png)
+ - логи тестов: 
+   - ![3.2_02_api_tests_logs.png](images/3.2_02_api_tests_logs.png)
  - логи event-service, где запросы `api/events/movie, api/events/payment, api/events/user` должны были:
    - попасть через proxy в `event-service`;
    - отправиться в kafka;
    - обработаться из kafka;
-   ![3.2_03_events-service_to_from_kafka_logs.png](images/3.2_03_events-service_to_from_kafka_logs.png)
+     - ![3.2_03_events-service_to_from_kafka_logs.png](images/3.2_03_events-service_to_from_kafka_logs.png)
 
 ## Задание 4
-Для простоты дальнейшего обновления и развертывания вам как архитектуру необходимо так же реализовать helm-чарты для прокси-сервиса и проверить работу 
+> Для простоты дальнейшего обновления и развертывания вам как архитектуру необходимо так же реализовать helm-чарты для прокси-сервиса и проверить работу 
 
-Для этого:
-1. Перейдите в директорию helm и отредактируйте файл values.yaml
+**Шаги выполнения задания**
+1. Подготовка конфигураций
+   - в values.yaml исправлены пути к регистри и добавлен секрет с токеном;
+   - сделаны шаблоны для proxy-service.yaml и events-service.yaml по аналогии с обычными deployment конфигами для кубернетеса;
+   - исправление бага [configmap.yaml](src/kubernetes/helm/templates/configmap.yaml) c путем movies-service;
 
-```yaml
-# Proxy service configuration
-proxyService:
-  enabled: true
-  image:
-    repository: ghcr.io/db-exp/cinemaabysstest/proxy-service
-    tag: latest
-    pullPolicy: Always
-  replicas: 1
-  resources:
-    limits:
-      cpu: 300m
-      memory: 256Mi
-    requests:
-      cpu: 100m
-      memory: 128Mi
-  service:
-    port: 80
-    targetPort: 8000
-    type: ClusterIP
-```
-
-- Вместо ghcr.io/db-exp/cinemaabysstest/proxy-service напишите свой путь до образа для всех сервисов
-- для imagePullSecret проставьте свое значение (скопируйте из конфигурации kubernetes)
-  ```yaml
-  imagePullSecrets:
-      dockerconfigjson: ewoJImF1dGhzIjogewoJCSJnaGNyLmlvIjogewoJCQkiYXV0aCI6ICJaR0l0Wlhod09tZG9jRjl2UTJocVZIa3dhMWhKVDIxWmFVZHJOV2hRUW10aFVXbFZSbTVaTjJRMFNYUjRZMWM9IgoJCX0KCX0sCgkiY3JlZHNTdG9yZSI6ICJkZXNrdG9wIiwKCSJjdXJyZW50Q29udGV4dCI6ICJkZXNrdG9wLWxpbnV4IiwKCSJwbHVnaW5zIjogewoJCSIteC1jbGktaGludHMiOiB7CgkJCSJlbmFibGVkIjogInRydWUiCgkJfQoJfSwKCSJmZWF0dXJlcyI6IHsKCQkiaG9va3MiOiAidHJ1ZSIKCX0KfQ==
-  ```
-
-2. В папке ./templates/services заполните шаблоны для proxy-service.yaml и events-service.yaml (опирайтесь на свою kubernetes конфигурацию - смысл helm'а сделать шаблоны для быстрого обновления и установки)
-
-```yaml
-template:
-    metadata:
-      labels:
-        app: proxy-service
-    spec:
-      containers:
-       Тут ваша конфигурация
-```
-
-3. Проверьте установку
-Сначала удалим установку руками
-
+2. Запуск
+ - удаление ручной инсталляции кубернетеса;
 ```bash
 kubectl delete all --all -n cinemaabyss
 kubectl delete  namespace cinemaabyss
 ```
-Запустите 
-```bash
-helm install cinemaabyss .\src\kubernetes\helm --namespace cinemaabyss --create-namespace
-```
-Если в процессе будет ошибка
-```code
-[2025-04-08 21:43:38,780] ERROR Fatal error during KafkaServer startup. Prepare to shutdown (kafka.server.KafkaServer)
-kafka.common.InconsistentClusterIdException: The Cluster ID OkOjGPrdRimp8nkFohYkCw doesn't match stored clusterId Some(sbkcoiSiQV2h_mQpwy05zQ) in meta.properties. The broker is trying to join the wrong cluster. Configured zookeeper.connect may be wrong.
-```
+- развертывание helm-чарта `helm install cinemaabyss .\src\kubernetes\helm --namespace cinemaabyss --create-namespace`
+- найден правка бага
 
-Проверьте развертывание:
+3. Проверки развертывания:
 ```bash
 kubectl get pods -n cinemaabyss
 minikube tunnel
 ```
-
-Потом вызовите 
-https://cinemaabyss.example.com/api/movies
-и приложите скриншот развертывания helm и вывода https://cinemaabyss.example.com/api/movies
+- развертывание и состояние кластера:
+  - ![4_01_helm_install.png](images/4_01_helm_install.png)
+  - ![4_02_helm_pods_check.png](images/4_02_helm_pods_check.png)
+- ручная проверка в postman:
+  - ![4_03_postman_api_check.png](images/4_03_postman_api_check.png)
 
 
 # Задание 5
