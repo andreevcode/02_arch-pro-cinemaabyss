@@ -1,0 +1,81 @@
+@startuml
+title Cinemaabys Container Diagram
+
+top to bottom direction
+
+!includeurl ./C4_Container.puml
+
+Person(user, "Пользователь", "")
+Container(web_app, "Web App", "browser", "использование сервиса")
+Container(mobile_app, "Mobile App", "Kotlin, Swift", "использование сервиса")
+Container(smart_tv_app, "Smart TV", "??", "использование сервиса")
+
+System_Ext(online_theater, "Online theaters", "Онлайн кинотеатры")
+System_Ext(online_theater, "Online theaters", "Онлайн кинотеатры")
+
+
+Boundary(api_system, "Cinemaabys", "System") {
+    Container(lb, "Load balancer", "http", "балансировка http")
+    Container(proxy_api, "Proxy API Gateway", "nginx", "REST, gateway, reverse proxy")
+
+    ContainerQueue(events_queue, "Events Queue", "kafka", "события")
+
+    Container(video_service, "Video service", "Java, String", "Просмотр видео")
+    Container(auth_service, "Auth service", Java Spring, "авторизация и аутентификация")
+    Container(user_service, "User service", Java Spring, "пользователи")
+    Container(payment_service, "Payment service", Java Spring, "платежи")
+    Container(sub_service, "Subscription service", Java Spring, "подписки")
+    Container(events_service, "Events service", Java Spring, "события")
+    Container(recommend_service, "Recomendation service", Java Spring, "события")
+    Container(movies_meta_service, "Movies Meta service", Java Spring, "Обработка мета информации\nи поиск")
+
+    Boundary(storages, "Storages") {
+        ContainerDb(meta_db, "Meta database", "SQL", "хранилище мета")
+        ContainerDb(user_cache, "User cache", "Redis", "кэш мета")
+    }
+}
+
+System_Ext(ext_payment_system, Bank systems, "Системы оплаты")
+System_Ext(recommendation_system,  Recommendation system, "Система подбора рекомендаций")
+
+Rel(lb, proxy_api," ")
+Rel(proxy_api, auth_service," ")
+
+Rel(user, web_app, "использует")
+Rel(user, mobile_app, "использует")
+Rel(user, smart_tv_app, "использует")
+
+Rel(video_service, web_app, "просмотр\nвидео")
+Rel(video_service, mobile_app, "просмотр\nвидео")
+Rel(video_service, smart_tv_app, "просмотр\nвидео")
+
+Rel(web_app, lb, " ")
+Rel(mobile_app, lb, " ")
+Rel(smart_tv_app, lb, " ")
+
+Rel(proxy_api, user_service, " ")
+Rel(proxy_api, payment_service, " ")
+Rel(proxy_api, sub_service, " ")
+Rel(proxy_api, movies_meta_service," ")
+Rel(proxy_api, events_service," ")
+Rel(proxy_api, recommend_service," ")
+
+Rel(events_service, events_queue,"Регистрация")
+Rel(events_queue, recommend_service,"Чтение")
+
+Rel(recommendation_system, recommend_service,"Рекомендации")
+Rel(recommend_service, movies_meta_service,"мета")
+
+Rel(video_service, online_theater,"видео")
+Rel(video_service, movies_meta_service,"мета")
+
+Rel(video_service, sub_service,"подписки")
+
+
+Rel(movies_meta_service, recommendation_system, " ")
+Rel(payment_service, ext_payment_system, "Проведение платежей")
+
+Rel_R(payment_service, sub_service, " ")
+Lay_R(payment_service, sub_service)
+
+@enduml

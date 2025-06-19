@@ -1,424 +1,168 @@
 ## Изучите [README.md](README.md) файл и структуру проекта.
 
 ## Задание 1
-
-1. Спроектируйте to be архитектуру КиноБездны, разделив всю систему на отдельные домены и организовав интеграционное взаимодействие и единую точку вызова сервисов.
+>Спроектируйте to be архитектуру КиноБездны, разделив всю систему на отдельные домены и организовав интеграционное взаимодействие и единую точку вызова сервисов.
 Результат представьте в виде контейнерной диаграммы в нотации С4.
-Добавьте ссылку на файл в этот шаблон
-[ссылка на файл](ссылка)
 
+**Диаграмма контейнеров TO_BE системы**
+![TO_BE_C4_containers.svg](diagrams/TO_BE_C4_containers.svg)
 
 ## Задание 2
+### Формулировки подзаданий
+**1. Proxy**
+> Команда КиноБездны уже выделила сервис метаданных о фильмах movies и вам необходимо реализовать бесшовный переход с применением паттерна Strangler Fig в части реализации прокси-сервиса (API Gateway), с помощью которого можно будет постепенно переключать траффик, используя фиче-флаг.
+> Реализуйте сервис на любом языке программирования в ./src/microservices/proxy.
+> Конфигурация для запуска сервиса через docker-compose уже добавлена
 
-### 1. Proxy
-Команда КиноБездны уже выделила сервис метаданных о фильмах movies и вам необходимо реализовать бесшовный переход с применением паттерна Strangler Fig в части реализации прокси-сервиса (API Gateway), с помощью которого можно будет постепенно переключать траффик, используя фиче-флаг.
+**2. Kafka**
+> Вам как архитектуру нужно также проверить гипотезу насколько просто реализовать применение Kafka в данной архитектуре.
+> Для этого нужно сделать MVP сервис events, который будет при вызове API создавать и сам же читать сообщения в топике Kafka.
+>    - Разработайте сервис на любом языке программирования с consumer'ами и producer'ами.
+>    - Реализуйте простой API, при вызове которого будут создаваться события User/Payment/Movie и обрабатываться внутри сервиса с записью в лог
+>    - Добавьте в docker-compose новый сервис, kafka там уже есть
 
+### Шаги выполнения заданий
+1. Реализован сервис [proxy](src/microservices/proxy) на java:
+   - поток `api/movies` разделяет между [monolith](src/monolith) и [movies-service](src/microservices/movies);
+   - поток `api/events` целиком идет на [events-service](src/microservices/events);
+   - остальные запросы, которые должно поддерживать внешнее API - идут на монолит;
 
-Реализуйте сервис на любом языке программирования в ./src/microservices/proxy.
-Конфигурация для запуска сервиса через docker-compose уже добавлена
-```yaml
-  proxy-service:
-    build:
-      context: ./src/microservices/proxy
-      dockerfile: Dockerfile
-    container_name: cinemaabyss-proxy-service
-    depends_on:
-      - monolith
-      - movies-service
-      - events-service
-    ports:
-      - "8000:8000"
-    environment:
-      PORT: 8000
-      MONOLITH_URL: http://monolith:8080
-      #монолит
-      MOVIES_SERVICE_URL: http://movies-service:8081 #сервис movies
-      EVENTS_SERVICE_URL: http://events-service:8082 
-      GRADUAL_MIGRATION: "true" # вкл/выкл простого фиче-флага
-      MOVIES_MIGRATION_PERCENT: "50" # процент миграции
-    networks:
-      - cinemaabyss-network
-```
+2. Реализован сервис [events](src/microservices/events) на java:
+   - который обрабатывает POST запросы путем записи эвентов в kafka;
+   - и сам же выступает консюмером kafka;
+   - события отправки в kafka и чтения из kafka пишутся в логи;
 
-- После реализации запустите postman тесты - они все должны быть зеленые.
-- Отправьте запросы к API Gateway:
-   ```bash
-   curl http://localhost:8000/api/movies
-   ```
-- Протестируйте постепенный переход, изменив переменную окружения MOVIES_MIGRATION_PERCENT в файле docker-compose.yml.
+3. Запуск контейнеров через docker-compose:
+   - примечание: по какой-то причине монолит не всегда стартует с 1 раза.
 
-### 2. Kafka
- Вам как архитектуру нужно также проверить гипотезу насколько просто реализовать применение Kafka в данной архитектуре.
-
-Для этого нужно сделать MVP сервис events, который будет при вызове API создавать и сам же читать сообщения в топике Kafka.
-
-    - Разработайте сервис на любом языке программирования с consumer'ами и producer'ами.
-    - Реализуйте простой API, при вызове которого будут создаваться события User/Payment/Movie и обрабатываться внутри сервиса с записью в лог
-    - Добавьте в docker-compose новый сервис, kafka там уже есть
-
-Необходимые тесты для проверки этого API вызываются при запуске npm run test:local из папки tests/postman 
-Приложите скриншот тестов и скриншот состояния топиков Kafka http://localhost:8090 
+4. Проверки
+ - запуск api тестов в docker:
+   - ![2_01_api_tests.png](images/2_01_api_tests.png) 
+ - отправка запросов к http://localhost:8000/api/movies и отслеживание по логам направления в proxy-service (с настрофками 25% к movies-service):
+   - ![2_02_rate_limit_proxying.png](images/2_02_rate_limit_proxying.png) 
+ - логи по kafka для `events-service`:
+   - ![2_03_event_service_kafka_logs.png](images/2_03_event_service_kafka_logs.png)
+ - состояние топиков в `kafka-ui`:
+   - ![2_04_kafka_topics_1.png](images/2_04_kafka_topics_1.png)
+   - ![2_04_kafka_topics_2.png](images/2_04_kafka_topics_2.png)
+   - ![2_04_kafka_topics_3.png](images/2_04_kafka_topics_3.png)
 
 
 ## Задание 3
-
-Команда начала переезд в Kubernetes для лучшего масштабирования и повышения надежности. 
+>Команда начала переезд в Kubernetes для лучшего масштабирования и повышения надежности. 
 Вам, как архитектору осталось самое сложное:
- - реализовать CI/CD для сборки прокси сервиса
- - реализовать необходимые конфигурационные файлы для переключения трафика.
+> - реализовать CI/CD для сборки прокси сервиса
+> - реализовать необходимые конфигурационные файлы для переключения трафика.
 
 
-### CI/CD
-
- В папке .github/worflows доработайте деплой новых сервисов proxy и events в docker-build-push.yml , чтобы api-tests при сборке отрабатывали корректно при отправке коммита в вашу новую ветку.
-
-Нужно доработать 
-```yaml
-on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'src/**'
-      - '.github/workflows/docker-build-push.yml'
-  release:
-    types: [published]
-```
-и добавить необходимые шаги в блок
-```yaml
-jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Log in to the Container registry
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-```
-Как только сборка отработает и в github registry появятся ваши образы, можно переходить к блоку настройки Kubernetes
-Успешным результатом данного шага является "зеленая" сборка и "зеленые" тесты
+### 3.1 CI/CD
+**Шаги выполнения задания**
+ - В папке `.github/worflows` доработан [docker-build-push.yml](.github/workflows/docker-build-push.yml) для новых сервисов proxy и events;
+    - в том числе добавлена возможность запуска на arm чипах apple: `platforms: linux/amd64,linux/arm64`;
+ - при создании/обновлении ПР теперь отрабатывают две джобы `github actions`:
+   - сборка запуск api тестов;
+   - сборка и деплой docker образов в `ghcr.io`;
+   
+**Где ваши доказательства?**
+- зеленые `github actions`: ![3.1_OK_github_actions.png](images/3.1_OK_github_actions.png)
+- выгруженные пакеты: ![3.1_OK_packages.png](images/3.1_OK_packages.png)
 
 
-### Proxy в Kubernetes
+### 3.2 Proxy в Kubernetes
+ **Шаги выполнения задания**
+1. Запуск кластера в соответствии с инструкцией отсюда.
+ - установлены kubectl и minikube со всеми зависимостями;
+ - пакеты выгружены в регистри гитхаба во время ПР, настроен токен для доступа к пакетам;
+ - доработаны конфиги кубернетеса, в частности:
+   - секрет с токеном [dockerconfigsecret.yaml](src/kubernetes/dockerconfigsecret.yaml);
+   - deployment [events-service.yaml](src/kubernetes/events-service.yaml) и [proxy-service.yaml](src/kubernetes/proxy-service.yaml);
+   - [ingress.yaml](src/kubernetes/ingress.yaml);
+   - обновлен `etc/hosts`: 127.0.0.1 cinemaabyss.example.com;
+ - приложения запущены в кластере кубернетиса через minikube, включен ingress;
+ - настроен `minikube tunnel`;
 
-#### Шаг 1
-Для деплоя в kubernetes необходимо залогиниться в docker registry Github'а.
-1. Создайте Personal Access Token (PAT) https://github.com/settings/tokens . Создавайте class с правом read:packages
-2. В src/kubernetes/*.yaml (event-service, monolith, movies-service и proxy-service)  отредактируйте путь до ваших образов 
-```bash
- spec:
-      containers:
-      - name: events-service
-        image: ghcr.io/ваш логин/имя репозитория/events-service:latest
-```
-3. Добавьте в секрет src/kubernetes/dockerconfigsecret.yaml в поле
-```bash
- .dockerconfigjson: значение в base64 файла ~/.docker/config.json
-```
+2. Ручной прогон в постмане запроса из задания (_Вызовите https://cinemaabyss.example.com/api/movies_) и других запросов:
+  - ![3.2_01_postman_api.movies.png](images/3.2_01_postman_api.movies.png)
 
-4. Если в ~/.docker/config.json нет значения для аутентификации
-```json
-{
-        "auths": {
-                "ghcr.io": {
-                       тут пусто
-                }
-        }
-}
-```
-то выполните 
-
-и добавьте
-
-```json 
- "auth": "имя пользователя:токен в base64"
-```
-
-Чтобы получить значение в base64 можно выполнить команду
-```bash
- echo -n ваш_логин:ваш_токен | base64
-```
-
-После заполнения config.json, также прогоните содержимое через base64
-
-```bash
-cat .docker/config.json | base64
-```
-
-и полученное значение добавляем в
-
-```bash
- .dockerconfigjson: значение в base64 файла ~/.docker/config.json
-```
-
-#### Шаг 2
-
-  Доработайте src/kubernetes/event-service.yaml и src/kubernetes/proxy-service.yaml
-
-  - Необходимо создать Deployment и Service 
-  - Доработайте ingress.yaml, чтобы можно было с помощью тестов проверить создание событий
-  - Выполните дальшейшие шаги для поднятия кластера:
-
-  1. Создайте namespace:
-  ```bash
-  kubectl apply -f src/kubernetes/namespace.yaml
-  ```
-  2. Создайте секреты и переменные
-  ```bash
-  kubectl apply -f src/kubernetes/configmap.yaml
-  kubectl apply -f src/kubernetes/secret.yaml
-  kubectl apply -f src/kubernetes/dockerconfigsecret.yaml
-  kubectl apply -f src/kubernetes/postgres-init-configmap.yaml
-  ```
-
-  3. Разверните базу данных:
-  ```bash
-  kubectl apply -f src/kubernetes/postgres.yaml
-  ```
-
-  На этом этапе если вызвать команду
-  ```bash
-  kubectl -n cinemaabyss get pod
-  ```
-  Вы увидите
-
-  NAME         READY   STATUS    
-  postgres-0   1/1     Running   
-
-  4. Разверните Kafka:
-  ```bash
-  kubectl apply -f src/kubernetes/kafka/kafka.yaml
-  ```
-
-  Проверьте, теперь должно быть запущено 3 пода, если что-то не так, то посмотрите логи
-  ```bash
-  kubectl -n cinemaabyss logs имя_пода (например - kafka-0)
-  ```
-
-  5. Разверните монолит:
-  ```bash
-  kubectl apply -f src/kubernetes/monolith.yaml
-  ```
-  6. Разверните микросервисы:
-  ```bash
-  kubectl apply -f src/kubernetes/movies-service.yaml
-  kubectl apply -f src/kubernetes/events-service.yaml
-  ```
-  7. Разверните прокси-сервис:
-  ```bash
-  kubectl apply -f src/kubernetes/proxy-service.yaml
-  ```
-
-  После запуска и поднятия подов вывод команды 
-  ```bash
-  kubectl -n cinemaabyss get pod
-  ```
-
-  Будет наподобие такого
-
-  NAME                              READY   STATUS    
-
-  events-service-7587c6dfd5-6whzx   1/1     Running  
-
-  kafka-0                           1/1     Running   
-
-  monolith-8476598495-wmtmw         1/1     Running  
-
-  movies-service-6d5697c584-4qfqs   1/1     Running  
-
-  postgres-0                        1/1     Running  
-
-  proxy-service-577d6c549b-6qfcv    1/1     Running  
-
-  zookeeper-0                       1/1     Running 
-
-  8. Добавим ingress
-
-  - добавьте аддон
-  ```bash
-  minikube addons enable ingress
-  ```
-  ```bash
-  kubectl apply -f src/kubernetes/ingress.yaml
-  ```
-  9. Добавьте в /etc/hosts
-  127.0.0.1 cinemaabyss.example.com
-
-  10. Вызовите
-  ```bash
-  minikube tunnel
-  ```
-  11. Вызовите https://cinemaabyss.example.com/api/movies
-  Вы должны увидеть вывод списка фильмов
-  Можно поэкспериментировать со значением   MOVIES_MIGRATION_PERCENT в src/kubernetes/configmap.yaml и убедится, что вызовы movies уходят полностью в новый сервис
-
-  12. Запустите тесты из папки tests/postman
-  ```bash
-   npm run test:kubernetes
-  ```
-  Часть тестов с health-чек упадет, но создание событий отработает.
-  Откройте логи event-service и сделайте скриншот обработки событий
-
-#### Шаг 3
-Добавьте сюда скриншота вывода при вызове https://cinemaabyss.example.com/api/movies и  скриншот вывода event-service после вызова тестов.
-
+3. Запуск тестов из папки tests/postman `npm run test:kubernetes`
+ - логи тестов: 
+   - ![3.2_02_api_tests_logs.png](images/3.2_02_api_tests_logs.png)
+ - логи event-service, где запросы `api/events/movie, api/events/payment, api/events/user` должны были:
+   - попасть через proxy в `event-service`;
+   - отправиться в kafka;
+   - обработаться из kafka;
+     - ![3.2_03_events-service_to_from_kafka_logs.png](images/3.2_03_events-service_to_from_kafka_logs.png)
 
 ## Задание 4
-Для простоты дальнейшего обновления и развертывания вам как архитектуру необходимо так же реализовать helm-чарты для прокси-сервиса и проверить работу 
+> Для простоты дальнейшего обновления и развертывания вам как архитектуру необходимо так же реализовать helm-чарты для прокси-сервиса и проверить работу 
 
-Для этого:
-1. Перейдите в директорию helm и отредактируйте файл values.yaml
+**Шаги выполнения задания**
+1. Подготовка конфигураций
+   - в values.yaml исправлены пути к регистри и добавлен секрет с токеном;
+   - сделаны шаблоны для proxy-service.yaml и events-service.yaml по аналогии с обычными deployment конфигами для кубернетеса;
+   - исправление бага [configmap.yaml](src/kubernetes/helm/templates/configmap.yaml) c путем movies-service;
 
-```yaml
-# Proxy service configuration
-proxyService:
-  enabled: true
-  image:
-    repository: ghcr.io/db-exp/cinemaabysstest/proxy-service
-    tag: latest
-    pullPolicy: Always
-  replicas: 1
-  resources:
-    limits:
-      cpu: 300m
-      memory: 256Mi
-    requests:
-      cpu: 100m
-      memory: 128Mi
-  service:
-    port: 80
-    targetPort: 8000
-    type: ClusterIP
-```
-
-- Вместо ghcr.io/db-exp/cinemaabysstest/proxy-service напишите свой путь до образа для всех сервисов
-- для imagePullSecret проставьте свое значение (скопируйте из конфигурации kubernetes)
-  ```yaml
-  imagePullSecrets:
-      dockerconfigjson: ewoJImF1dGhzIjogewoJCSJnaGNyLmlvIjogewoJCQkiYXV0aCI6ICJaR0l0Wlhod09tZG9jRjl2UTJocVZIa3dhMWhKVDIxWmFVZHJOV2hRUW10aFVXbFZSbTVaTjJRMFNYUjRZMWM9IgoJCX0KCX0sCgkiY3JlZHNTdG9yZSI6ICJkZXNrdG9wIiwKCSJjdXJyZW50Q29udGV4dCI6ICJkZXNrdG9wLWxpbnV4IiwKCSJwbHVnaW5zIjogewoJCSIteC1jbGktaGludHMiOiB7CgkJCSJlbmFibGVkIjogInRydWUiCgkJfQoJfSwKCSJmZWF0dXJlcyI6IHsKCQkiaG9va3MiOiAidHJ1ZSIKCX0KfQ==
-  ```
-
-2. В папке ./templates/services заполните шаблоны для proxy-service.yaml и events-service.yaml (опирайтесь на свою kubernetes конфигурацию - смысл helm'а сделать шаблоны для быстрого обновления и установки)
-
-```yaml
-template:
-    metadata:
-      labels:
-        app: proxy-service
-    spec:
-      containers:
-       Тут ваша конфигурация
-```
-
-3. Проверьте установку
-Сначала удалим установку руками
-
+2. Запуск
+ - удаление ручной инсталляции кубернетеса;
 ```bash
 kubectl delete all --all -n cinemaabyss
 kubectl delete  namespace cinemaabyss
 ```
-Запустите 
-```bash
-helm install cinemaabyss .\src\kubernetes\helm --namespace cinemaabyss --create-namespace
-```
-Если в процессе будет ошибка
-```code
-[2025-04-08 21:43:38,780] ERROR Fatal error during KafkaServer startup. Prepare to shutdown (kafka.server.KafkaServer)
-kafka.common.InconsistentClusterIdException: The Cluster ID OkOjGPrdRimp8nkFohYkCw doesn't match stored clusterId Some(sbkcoiSiQV2h_mQpwy05zQ) in meta.properties. The broker is trying to join the wrong cluster. Configured zookeeper.connect may be wrong.
-```
+- развертывание helm-чарта `helm install cinemaabyss .\src\kubernetes\helm --namespace cinemaabyss --create-namespace`
+- найден правка бага
 
-Проверьте развертывание:
+3. Проверки развертывания:
 ```bash
 kubectl get pods -n cinemaabyss
 minikube tunnel
 ```
-
-Потом вызовите 
-https://cinemaabyss.example.com/api/movies
-и приложите скриншот развертывания helm и вывода https://cinemaabyss.example.com/api/movies
+- развертывание и состояние кластера:
+  - ![4_01_helm_install.png](images/4_01_helm_install.png)
+  - ![4_02_helm_pods_check.png](images/4_02_helm_pods_check.png)
+- ручная проверка в postman:
+  - ![4_03_postman_api_check.png](images/4_03_postman_api_check.png)
 
 
 # Задание 5
-Компания планирует активно развиваться и для повышения надежности, безопасности, реализации сетевых паттернов типа Circuit Breaker и канареечного деплоя вам как архитектору необходимо развернуть istio и настроить circuit breaker для monolith и movies сервисов.
+> Компания планирует активно развиваться и для повышения надежности, безопасности, реализации сетевых паттернов типа Circuit Breaker и канареечного деплоя вам как архитектору необходимо развернуть istio и настроить circuit breaker для monolith и movies сервисов.
 
-```bash
+**Шаги выполнения задания**
+1. Подготовка.
+- конфиг для будущего запуска на envoy-сайдкаре [circuit-braker-config.yaml](src/kubernetes/circuit-braker-config.yaml)
+- установка istio, прописывание его для namespace=cinemaabyss
+- затем рестарт релиза для namespace=cinemaabyss, чтобы сайдкары подтянулись
+- и применение конфига circuit-braker;
+    ```bash
+    helm repo add istio https://istio-release.storage.googleapis.com/charts
+    helm repo update
+    
+    helm install istio-base istio/base -n istio-system --set defaultRevision=default --create-namespace
+    helm install istio-ingressgateway istio/gateway -n istio-system
+    helm install istiod istio/istiod -n istio-system --wait
+    
+    helm install cinemaabyss ./src/kubernetes/helm --namespace cinemaabyss --create-namespace
+    
+    kubectl label namespace cinemaabyss istio-injection=enabled --overwrite
+    
+    kubectl get namespace -L istio-injection
+    
+    -- рестарт
+    kubectl rollout restart deployment -n cinemaabyss 
+    
+    kubectl apply -f .\src\kubernetes\circuit-breaker-config.yaml -n cinemaabyss
+    ```
 
-helm repo add istio https://istio-release.storage.googleapis.com/charts
-helm repo update
+2. Тестирование
+- установка fortio - инструмента для нагрузочного тестирования; 
+  - `kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.25/samples/httpbin/sample-client/fortio-deploy.yaml -n cinemaabyss`
 
-helm install istio-base istio/base -n istio-system --set defaultRevision=default --create-namespace
-helm install istio-ingressgateway istio/gateway -n istio-system
-helm install istiod istio/istiod -n istio-system --wait
-
-helm install cinemaabyss .\src\kubernetes\helm --namespace cinemaabyss --create-namespace
-
-kubectl label namespace cinemaabyss istio-injection=enabled --overwrite
-
-kubectl get namespace -L istio-injection
-
-kubectl apply -f .\src\kubernetes\circuit-breaker-config.yaml -n cinemaabyss
-
-```
-
-Тестирование
-
-# fortio
-```bash
-kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.25/samples/httpbin/sample-client/fortio-deploy.yaml -n cinemaabyss
-```
-
-# Get the fortio pod name
-```bash
-FORTIO_POD=$(kubectl get pod -n cinemaabyss | grep fortio | awk '{print $1}')
-
-kubectl exec -n cinemaabyss $FORTIO_POD -c fortio -- fortio load -c 50 -qps 0 -n 500 -loglevel Warning http://movies-service:8081/api/movies
-```
-Например,
-
-```bash
-kubectl exec -n cinemaabyss fortio-deploy-b6757cbbb-7c9qg  -c fortio -- fortio load -c 50 -qps 0 -n 500 -loglevel Warning http://movies-service:8081/api/movies
-```
-
-Вывод будет типа такого
-
-```bash
-IP addresses distribution:
-10.106.113.46:8081: 421
-Code 200 : 79 (15.8 %)
-Code 500 : 22 (4.4 %)
-Code 503 : 399 (79.8 %)
-```
-Можно еще проверить статистику
-
-```bash
-kubectl exec -n cinemaabyss fortio-deploy-b6757cbbb-7c9qg -c istio-proxy -- pilot-agent request GET stats | grep movies-service | grep pending
-```
-
-И там смотрим 
-
-```bash
-cluster.outbound|8081||movies-service.cinemaabyss.svc.cluster.local;.upstream_rq_pending_total: 311 - столько раз срабатывал circuit breaker
-You can see 21 for the upstream_rq_pending_overflow value which means 21 calls so far have been flagged for circuit breaking.
-```
-
-Приложите скриншот работы circuit breaker'а
-
-Удаляем все
-```bash
-istioctl uninstall --purge
-kubectl delete namespace istio-system
-kubectl delete all --all -n cinemaabyss
-kubectl delete namespace cinemaabyss
-```
+- получить имя пода fortio, и далее его использовать для запуска тестов:
+  - `FORTIO_POD=$(kubectl get pod -n cinemaabyss | grep fortio | awk '{print $1}')`
+- запуск нагрузочного тестирования:
+  - `kubectl exec -n cinemaabyss $FORTIO_POD -c fortio -- fortio load -c 50 -qps 0 -n 500 -loglevel Warning http://movies-service:8081/api/movies`
+3. Сбор результатов:
+- из вывода команды запуска тестирования;
+- а также дополнительно просмотреть статистику через pilot-agent:
+  - `kubectl exec -n cinemaabyss fortio-deploy-b6757cbbb-7c9qg -c istio-proxy -- pilot-agent request GET stats | grep movies-service | grep pending`
+4. Итоги:
+![5_fortio_load_test_results_for_istio_circuit_braker.png](images/5_fortio_load_test_results_for_istio_circuit_braker.png)
